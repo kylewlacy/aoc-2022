@@ -17,10 +17,11 @@ fn main() -> anyhow::Result<()> {
         let line = line?;
         let mut columns = line.split_whitespace();
         let opponent_move = columns.next().context("no opponent move")?;
-        let my_move = columns.next().context("no response move")?;
+        let outcome = columns.next().context("no outcome")?;
 
         let opponent_move = Move::parse_opponent_move(opponent_move)?;
-        let my_move = Move::parse_my_move(my_move)?;
+        let outcome = Outcome::parse_outcome(outcome)?;
+        let my_move = Move::determine_move(opponent_move, outcome);
 
         total_score += score_move(opponent_move, my_move);
     }
@@ -47,12 +48,15 @@ impl Move {
         }
     }
 
-    fn parse_my_move(s: &str) -> anyhow::Result<Self> {
-        match s {
-            "X" => Ok(Move::Rock),
-            "Y" => Ok(Move::Paper),
-            "Z" => Ok(Move::Scissors),
-            other => anyhow::bail!("unknown move: {other:?}"),
+    fn determine_move(opponent: Move, outcome: Outcome) -> Self {
+        match (opponent, outcome) {
+            (mv, Outcome::Draw) => mv,
+            (Move::Rock, Outcome::Win) => Move::Paper,
+            (Move::Rock, Outcome::Loss) => Move::Scissors,
+            (Move::Paper, Outcome::Win) => Move::Scissors,
+            (Move::Paper, Outcome::Loss) => Move::Rock,
+            (Move::Scissors, Outcome::Win) => Move::Rock,
+            (Move::Scissors, Outcome::Loss) => Move::Paper,
         }
     }
 }
@@ -83,8 +87,20 @@ fn score_move(opponent: Move, mine: Move) -> u64 {
     shape_score + outcome_score
 }
 
+#[derive(Debug, Clone, Copy)]
 enum Outcome {
     Win,
     Loss,
     Draw,
+}
+
+impl Outcome {
+    fn parse_outcome(s: &str) -> anyhow::Result<Self> {
+        match s {
+            "X" => Ok(Outcome::Loss),
+            "Y" => Ok(Outcome::Draw),
+            "Z" => Ok(Outcome::Win),
+            other => anyhow::bail!("unknown outcome: {other:?}"),
+        }
+    }
 }
