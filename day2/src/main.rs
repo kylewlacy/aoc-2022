@@ -1,13 +1,6 @@
 use std::io::BufRead;
 
 use anyhow::Context;
-use clap::Parser;
-
-#[derive(Debug, Parser)]
-struct Args {
-    #[arg(long)]
-   top_slots: usize,
-}
 
 fn main() -> anyhow::Result<()> {
     let stdin = std::io::stdin().lock();
