@@ -33,8 +33,8 @@ fn complete_overlap(first: &RangeInclusive<u64>, second: &RangeInclusive<u64>) -
     // fs             fe
     //     ss    se
     // fs <= ss && fe >= se
-    (first.start() >= second.start() && first.end() <= second.end())
-        || (second.start() >= first.start() && second.end() <= first.end())
+    (first.contains(second.start()) && first.contains(second.end()))
+        || (second.contains(first.start()) && second.contains(first.end()))
 }
 
 fn partial_overlap(first: &RangeInclusive<u64>, second: &RangeInclusive<u64>) -> bool {
