@@ -66,7 +66,7 @@ fn main() -> anyhow::Result<()> {
         let mut from_column = std::mem::take(columns.entry(from_index).or_default());
         let mut to_column = std::mem::take(columns.entry(to_index).or_default());
 
-        let popped = from_column.drain(from_column.len() - count..).rev();
+        let popped = from_column.drain(from_column.len() - count..);
         to_column.extend(popped);
 
         columns.insert(from_index, from_column);
