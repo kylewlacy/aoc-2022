@@ -11,7 +11,7 @@ fn main() -> anyhow::Result<()> {
     let sync_index =
         datastream
             .as_bytes()
-            .windows(4)
+            .windows(14)
             .enumerate()
             .find_map(|(start_index, bytes)| {
                 for (a, b) in bytes.iter().tuple_combinations() {
