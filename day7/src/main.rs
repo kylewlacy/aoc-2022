@@ -6,7 +6,9 @@ use clap::Parser;
 #[derive(Parser)]
 struct Args {
     #[clap(long)]
-    size_cutoff: u64,
+    total_disk_space: u64,
+    #[clap(long)]
+    target_unused_space: u64,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -79,18 +81,34 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
-    let total_candidate_directory_size: u64 = filesystem
+    let current_unused_space = args
+        .total_disk_space
+        .checked_sub(filesystem.size())
+        .context("filesystem is using more than total disk space")?;
+    let required_to_delete = args
+        .target_unused_space
+        .checked_sub(current_unused_space)
+        .context("already have enough disk space")?;
+    let mut directory_sizes: Vec<_> = filesystem
         .entries()
         .filter_map(|entry| match entry {
-            FilesystemEntry::Directory(dir) if dir.total_size <= args.size_cutoff => {
-                Some(dir.total_size)
-            }
-            _ => None,
+            FilesystemEntry::Directory(dir) => Some(dir.total_size),
+            FilesystemEntry::File(_) => None,
         })
-        .sum();
-    println!("{total_candidate_directory_size}");
+        .collect();
 
-    Ok(())
+    directory_sizes.sort();
+
+    for candidate_directory_size in directory_sizes {
+        if candidate_directory_size >= required_to_delete {
+            // Delete this directory and exit.
+            println!("{candidate_directory_size}");
+
+            return Ok(());
+        }
+    }
+
+    anyhow::bail!("could not find a big enough directory to delete");
 }
 
 #[derive(Debug)]
