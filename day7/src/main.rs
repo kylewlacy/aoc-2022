@@ -1,8 +1,17 @@
 use std::{collections::HashMap, io::BufRead};
 
 use anyhow::Context;
+use clap::Parser;
+
+#[derive(Parser)]
+struct Args {
+    #[clap(long)]
+    size_cutoff: u64,
+}
 
 fn main() -> anyhow::Result<()> {
+    let args = Args::parse();
+
     let stdin = std::io::stdin().lock();
     let mut lines = stdin.lines().peekable();
 
@@ -70,7 +79,16 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
-    println!("{filesystem:#?}");
+    let total_candidate_directory_size: u64 = filesystem
+        .entries()
+        .filter_map(|entry| match entry {
+            FilesystemEntry::Directory(dir) if dir.total_size <= args.size_cutoff => {
+                Some(dir.total_size)
+            }
+            _ => None,
+        })
+        .sum();
+    println!("{total_candidate_directory_size}");
 
     Ok(())
 }
@@ -117,32 +135,61 @@ impl FilesystemEntry {
         filename: String,
         entry: FilesystemEntry,
     ) -> anyhow::Result<()> {
+        let entry_size = entry.size();
+
         let mut dir = match self {
             Self::Directory(dir) => dir,
             Self::File(_) => anyhow::bail!("not a directory"),
         };
+        dir.total_size += entry_size;
+
         for path_component in &current_directory.components {
             dir = match dir.entries.get_mut(path_component) {
                 Some(Self::Directory(dir)) => dir,
                 Some(Self::File(_)) => anyhow::bail!("not a directory: {path_component}"),
                 None => anyhow::bail!("file not found: {path_component}"),
             };
+            dir.total_size += entry_size;
         }
 
         dir.entries.insert(filename, entry);
 
         Ok(())
     }
+
+    fn size(&self) -> u64 {
+        match self {
+            FilesystemEntry::Directory(dir) => dir.total_size,
+            FilesystemEntry::File(file) => file.size,
+        }
+    }
+
+    fn entries(&self) -> impl Iterator<Item = &FilesystemEntry> {
+        let mut queue: Vec<&FilesystemEntry> = vec![self];
+        std::iter::from_fn(move || {
+            let current = queue.pop();
+            match current {
+                Some(Self::Directory(dir)) => {
+                    queue.extend(dir.entries.values());
+                }
+                _ => {}
+            }
+
+            current
+        })
+    }
 }
 
 #[derive(Debug)]
 struct Directory {
+    total_size: u64,
     entries: HashMap<String, FilesystemEntry>,
 }
 
 impl Directory {
     fn empty() -> Self {
         Directory {
+            total_size: 0,
             entries: HashMap::new(),
         }
     }
