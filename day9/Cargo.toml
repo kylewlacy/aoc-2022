@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 color-eyre = "0.6.2"
 eyre = "0.6.8"
+joinery = "3.1.0"

@@ -1,4 +1,7 @@
+#![feature(array_windows)]
+
 use std::{
+    cell::Cell,
     collections::HashSet,
     fmt::Display,
     io::BufRead,
@@ -6,10 +9,12 @@ use std::{
     str::FromStr,
 };
 
+use joinery::JoinableIterator;
+
 fn main() -> color_eyre::Result<()> {
     let stdin = std::io::stdin().lock();
 
-    let mut rope = Rope::new();
+    let mut rope = Rope::new(10);
 
     for line in stdin.lines() {
         let line = line?;
@@ -28,44 +33,88 @@ fn main() -> color_eyre::Result<()> {
         }
     }
 
-    println!("{}", rope.tail_positions.len());
+    // println!("{}", rope.display_rope());
+    // println!();
+
+    println!("{}", rope.last_positions.len());
 
     Ok(())
 }
 
 struct Rope {
-    head_position: Position,
-    tail_position: Position,
-    tail_positions: HashSet<Position>,
+    knot_positions: Vec<Cell<Position>>,
+    last_positions: HashSet<Position>,
 }
 
 impl Rope {
-    fn new() -> Self {
+    fn new(knots: usize) -> Self {
         let initial_posiiton = Position { x: 0, y: 0 };
         Self {
-            head_position: initial_posiiton,
-            tail_position: initial_posiiton,
-            tail_positions: HashSet::from([initial_posiiton]),
+            knot_positions: vec![Cell::new(initial_posiiton); knots],
+            last_positions: HashSet::from([initial_posiiton]),
         }
     }
 
     fn move_head(&mut self, direction: Direction) {
-        self.head_position += direction.vector();
-
-        self.adjust_tail_position();
-
-        self.tail_positions.insert(self.tail_position);
-    }
-
-    fn adjust_tail_position(&mut self) {
-        if self.head_position.is_touching(self.tail_position) {
-            return;
+        if let Some(first) = self.knot_positions.first_mut() {
+            let first = first.get_mut();
+            *first += direction.vector();
         }
 
-        let adjustment = (self.head_position - self.tail_position).normalize();
+        for [head, tail] in self.knot_positions.array_windows() {
+            tail.set(adjust_tail_position(head.get(), tail.get()));
+        }
 
-        self.tail_position += adjustment;
+        if let Some(last) = self.knot_positions.last() {
+            self.last_positions.insert(last.get());
+        }
     }
+
+    #[allow(unused)]
+    fn display_rope(&self) -> impl Display + '_ {
+        let knot_positions = self.knot_positions.iter().map(|pos| pos.get());
+        let x_min = knot_positions.clone().map(|pos| pos.x).min().unwrap();
+        let x_max = knot_positions.clone().map(|pos| pos.x).max().unwrap();
+        let y_min = knot_positions.clone().map(|pos| pos.y).min().unwrap();
+        let y_max = knot_positions.clone().map(|pos| pos.y).max().unwrap();
+
+        let y_bounds = ((y_min - 1)..=(y_max + 1)).rev(); // Reverse to go from top to bottom
+
+        y_bounds
+            .map(move |y| {
+                let x_bounds = (x_min - 1)..=(x_max + 1);
+                ((x_min - 1)..=(x_max + 1))
+                    .map(move |x| {
+                        let pos = Position { x, y };
+                        self.knot_positions
+                            .iter()
+                            .enumerate()
+                            .find_map(|(n, knot)| {
+                                if knot.get() == pos {
+                                    match n.try_into().unwrap() {
+                                        0 => Some('H'),
+                                        n => Some(char::from_digit(n, 16).unwrap_or('-')),
+                                    }
+                                } else {
+                                    None
+                                }
+                            })
+                            .unwrap_or('.')
+                    })
+                    .join_concat()
+            })
+            .join_with("\n")
+    }
+}
+
+fn adjust_tail_position(head: Position, tail: Position) -> Position {
+    if head.is_touching(tail) {
+        return tail;
+    }
+
+    let adjustment = (head - tail).normalize();
+
+    tail + adjustment
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
