@@ -20,17 +20,24 @@ fn main() -> color_eyre::Result<()> {
     let mut run_system = system.run(program);
     let mut current_cycle = 0;
 
-    let interesting_cycles = BTreeSet::from([20, 60, 100, 140, 180, 220]);
-    let mut interesting_signal_sum = 0;
-
     let result = loop {
         match Pin::new(&mut run_system).resume(()) {
             GeneratorState::Yielded(()) => {
-                current_cycle += 1;
-                if interesting_cycles.contains(&current_cycle) {
-                    let signal_value = current_cycle * system.x.get();
-                    interesting_signal_sum += signal_value;
+                let sprite_x = system.x.get();
+                let sprite_range = (sprite_x - 1)..=(sprite_x + 1);
+                let screen_x = current_cycle % 40;
+
+                if screen_x == 0 {
+                    println!();
                 }
+
+                if sprite_range.contains(&screen_x) {
+                    print!("#")
+                } else {
+                    print!(".");
+                }
+
+                current_cycle += 1;
             }
             GeneratorState::Complete(result) => {
                 break result;
@@ -39,7 +46,7 @@ fn main() -> color_eyre::Result<()> {
     };
     let () = result?;
 
-    println!("{interesting_signal_sum}");
+    println!();
 
     Ok(())
 }
