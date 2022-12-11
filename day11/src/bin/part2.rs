@@ -1,10 +1,17 @@
 use std::{cmp::Reverse, io::BufRead, str::FromStr};
 
+use clap::Parser;
 use joinery::JoinableIterator;
 use num_bigint::BigInt;
 use num_traits::Zero;
 use regex::Regex;
 use tracing_subscriber::{prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt};
+
+#[derive(Debug, Parser)]
+struct Args {
+    #[clap(short, long, default_value_t = 10000)]
+    rounds: u64,
+}
 
 fn main() -> eyre::Result<()> {
     color_eyre::install()?;
@@ -13,6 +20,8 @@ fn main() -> eyre::Result<()> {
         .with(tracing_subscriber::fmt::layer().without_time())
         .with(tracing_subscriber::EnvFilter::from_default_env())
         .init();
+
+    let args = Args::parse();
 
     let stdin = std::io::stdin().lock();
     let mut lines = stdin.lines();
@@ -113,7 +122,7 @@ fn main() -> eyre::Result<()> {
         monkeys.push(monkey);
     }
 
-    let monkey_business = play_keep_away(monkeys);
+    let monkey_business = play_keep_away(monkeys, args.rounds);
 
     println!("{monkey_business}");
 
@@ -128,8 +137,8 @@ lazy_static::lazy_static! {
     static ref CONDITION_REGEX: Regex = Regex::new(r##"\s+If (true|false): (throw to monkey \d+)$"##).unwrap();
 }
 
-fn play_keep_away(mut monkeys: Vec<Monkey>) -> usize {
-    for round in 1..=10_000 {
+fn play_keep_away(mut monkeys: Vec<Monkey>, rounds: u64) -> usize {
+    for round in 1..=rounds {
         tracing::info!("Round {round}");
 
         for i in 0..monkeys.len() {
