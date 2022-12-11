@@ -140,6 +140,7 @@ dependencies = [
  "lazy_format",
  "lazy_static",
  "num-bigint",
+ "num-integer",
  "num-traits",
  "regex",
  "tracing",

@@ -3,7 +3,8 @@ use std::{cmp::Reverse, io::BufRead, str::FromStr};
 use clap::Parser;
 use joinery::JoinableIterator;
 use num_bigint::BigInt;
-use num_traits::Zero;
+use num_integer::Integer;
+use num_traits::{One, Zero};
 use regex::Regex;
 use tracing_subscriber::{prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt};
 
@@ -138,12 +139,18 @@ lazy_static::lazy_static! {
 }
 
 fn play_keep_away(mut monkeys: Vec<Monkey>, rounds: u64) -> usize {
+    let lcm = monkeys
+        .iter()
+        .fold(BigInt::one(), |lcm, monkey| lcm.lcm(&monkey.lcm()));
+
+    tracing::info!("Computed LCM {lcm}");
+
     for round in 1..=rounds {
         tracing::info!("Round {round}");
 
         for i in 0..monkeys.len() {
             tracing::trace!("Monkey {i}:");
-            let outcomes = monkeys[i].play_turn();
+            let outcomes = monkeys[i].play_turn(&lcm);
             for outcome in outcomes {
                 match outcome {
                     Outcome::ThrowToMonkey { item, target } => {
@@ -188,7 +195,7 @@ struct Monkey {
 }
 
 impl Monkey {
-    fn play_turn(&mut self) -> Vec<Outcome> {
+    fn play_turn(&mut self, lcm: &BigInt) -> Vec<Outcome> {
         let mut outcomes = vec![];
 
         for mut item in self.items.drain(..) {
@@ -199,6 +206,9 @@ impl Monkey {
 
             // Inspect the item
             item.worry = self.operation.apply(&item.worry);
+
+            // Modulo the item by the least common multiple
+            item.worry %= lcm;
 
             tracing::trace!("    Worry level becomes {}", item.worry);
 
@@ -225,6 +235,21 @@ impl Monkey {
         }
 
         outcomes
+    }
+
+    fn lcm(&self) -> BigInt {
+        let divisor = match &self.condition.test {
+            Test::DivisibleBy(divisor) => divisor,
+        };
+        let multiplier = match &self.operation {
+            Operation::Add(_, _) => BigInt::one(),
+            Operation::Multiply(a, b) => {
+                let a_lcm = a.lcm();
+                let b_lcm = b.lcm();
+                a_lcm.lcm(&b_lcm)
+            }
+        };
+        divisor.lcm(&multiplier)
     }
 }
 
@@ -290,6 +315,13 @@ impl Operand {
         match self {
             Operand::Value(value) => value,
             Operand::Old => old,
+        }
+    }
+
+    fn lcm(&self) -> BigInt {
+        match self {
+            Operand::Value(value) => value.clone(),
+            Operand::Old => BigInt::one(),
         }
     }
 }
