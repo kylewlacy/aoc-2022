@@ -206,4 +206,18 @@ impl Bounds {
     pub fn height(&self) -> i32 {
         (self.max.y - self.min.y) + 1
     }
+
+    pub fn bottom_left(&self) -> Point {
+        let x = self.min.x;
+        let y = self.max.y;
+
+        Point { x, y }
+    }
+
+    pub fn bottom_right(&self) -> Point {
+        let x = self.max.x;
+        let y = self.max.y;
+
+        Point { x, y }
+    }
 }
