@@ -1,7 +1,4 @@
-use std::{
-    fmt::Display,
-    ops::{Add, AddAssign, RangeInclusive, Sub},
-};
+use std::ops::RangeInclusive;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Point {
@@ -12,74 +9,6 @@ pub struct Point {
 impl Point {
     pub fn manhattan_distance(&self, other: &Point) -> i32 {
         (self.x - other.x).abs() + (self.y - other.y).abs()
-    }
-}
-
-impl Display for Point {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{},{}", self.x, self.y)
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Vector {
-    pub x: i32,
-    pub y: i32,
-}
-
-impl Vector {
-    fn normalize(self) -> Self {
-        let x = match self.x {
-            i32::MIN..=-1 => -1,
-            0 => 0,
-            1..=i32::MAX => 1,
-        };
-        let y = match self.y {
-            i32::MIN..=-1 => -1,
-            0 => 0,
-            1..=i32::MAX => 1,
-        };
-        Self { x, y }
-    }
-}
-
-impl Add<Vector> for Point {
-    type Output = Point;
-
-    fn add(self, rhs: Vector) -> Point {
-        Point {
-            x: self.x + rhs.x,
-            y: self.y + rhs.y,
-        }
-    }
-}
-
-impl Add<Point> for Vector {
-    type Output = Point;
-
-    fn add(self, rhs: Point) -> Point {
-        Point {
-            x: self.x + rhs.x,
-            y: self.y + rhs.y,
-        }
-    }
-}
-
-impl AddAssign<Vector> for Point {
-    fn add_assign(&mut self, rhs: Vector) {
-        self.x += rhs.x;
-        self.y += rhs.y;
-    }
-}
-
-impl Sub for Point {
-    type Output = Vector;
-
-    fn sub(self, rhs: Self) -> Vector {
-        Vector {
-            x: self.x - rhs.x,
-            y: self.y - rhs.y,
-        }
     }
 }
 
@@ -102,6 +31,13 @@ impl Bounds {
         self.min.y = std::cmp::min(self.min.y, point.y);
         self.max.x = std::cmp::max(self.max.x, point.x);
         self.max.y = std::cmp::max(self.max.y, point.y);
+    }
+
+    pub fn union(&mut self, bounds: &Bounds) {
+        self.min.x = std::cmp::min(self.min.x, bounds.min.x);
+        self.max.x = std::cmp::max(self.max.x, bounds.max.x);
+        self.min.y = std::cmp::min(self.min.y, bounds.min.y);
+        self.max.y = std::cmp::max(self.max.y, bounds.max.y);
     }
 
     pub fn x_bounds(&self) -> RangeInclusive<i32> {
@@ -132,15 +68,7 @@ impl Bounds {
         (min_x..=max_x).flat_map(move |x| (min_y..=max_y).map(move |y| Point { x, y }))
     }
 
-    pub fn union(&self, bounds: &Bounds) -> Self {
-        let min_x = std::cmp::min(self.min.x, bounds.min.x);
-        let max_x = std::cmp::max(self.max.x, bounds.max.x);
-        let min_y = std::cmp::min(self.min.y, bounds.min.y);
-        let max_y = std::cmp::max(self.max.y, bounds.max.y);
-
-        Self {
-            min: Point { x: min_x, y: min_y },
-            max: Point { x: max_x, y: max_y },
-        }
+    pub fn points_row(&self, row: i32) -> impl Iterator<Item = Point> {
+        self.x_bounds().map(move |x| Point { x, y: row })
     }
 }

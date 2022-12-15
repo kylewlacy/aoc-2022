@@ -1,8 +1,7 @@
-use std::{fmt::Display, io::BufRead, str::FromStr};
+use std::{io::BufRead, str::FromStr};
 
 use clap::Parser;
 use day15::{Bounds, Point};
-use joinery::JoinableIterator;
 
 #[derive(Parser)]
 struct Args {
@@ -16,33 +15,30 @@ fn main() -> eyre::Result<()> {
     let args = Args::parse();
 
     let stdin = std::io::stdin().lock();
-    let mut grid = None;
-    for line in stdin.lines() {
-        let line = line?;
-        let report = line.parse::<SensorReport>()?;
+    let sensor_reports = stdin
+        .lines()
+        .map(|line| eyre::Result::Ok(line?.parse::<SensorReport>()?))
+        .collect::<eyre::Result<Vec<_>>>()?;
 
-        let grid =
-            grid.get_or_insert_with(|| Grid::new(Cell::default(), Bounds::new(report.sensor)));
+    let initial_bounds: Option<Bounds> = None;
+    let bounds = sensor_reports
+        .iter()
+        .fold(initial_bounds, |bounds, report| match bounds {
+            Some(mut bounds) => {
+                bounds.union(&report.covered_bounds());
+                Some(bounds)
+            }
+            None => Some(report.covered_bounds()),
+        });
 
-        grid.update(report.sensor, |cell| cell.kind = CellKind::Sensor);
-        grid.update(report.closest_beacon, |cell| cell.kind = CellKind::Beacon);
+    let bounds = bounds.unwrap_or_else(|| Bounds::new(Point { x: 0, y: 0 }));
 
-        for point in report.covered_points() {
-            grid.update(point, |cell| cell.is_covered = true);
-        }
-    }
-
-    let grid =
-        grid.unwrap_or_else(|| Grid::new(Cell::default(), Bounds::new(Point { x: 0, y: 0 })));
-
-    let num_covered_points = grid
-        .row(args.search_row)
-        .filter(|&(_, cell)| cell.is_beaconless())
+    let num_beaconless_points = bounds
+        .points_row(args.search_row)
+        .filter(|&point| is_beaconless(&sensor_reports, point))
         .count();
 
-    println!("{}", grid.display());
-
-    println!("Total covered points: {num_covered_points}");
+    println!("Total beaconless points: {num_beaconless_points}");
 
     Ok(())
 }
@@ -53,18 +49,24 @@ struct SensorReport {
 }
 
 impl SensorReport {
-    fn covered_points(&self) -> impl Iterator<Item = Point> {
-        let radius = self.sensor.manhattan_distance(&self.closest_beacon);
+    fn covers_point(&self, point: Point) -> bool {
+        let sensor_radius = self.sensor.manhattan_distance(&self.closest_beacon);
+        let distance = self.sensor.manhattan_distance(&point);
 
-        let sensor = self.sensor;
-        let x_min = sensor.x - radius;
-        let x_max = sensor.x + radius;
-        let y_min = sensor.y - radius;
-        let y_max = sensor.y + radius;
+        sensor_radius >= distance
+    }
 
-        (x_min..=x_max)
-            .flat_map(move |x| (y_min..=y_max).map(move |y| Point { x, y }))
-            .filter(move |point| point.manhattan_distance(&sensor) <= radius)
+    fn covered_bounds(&self) -> Bounds {
+        let sensor_radius = self.sensor.manhattan_distance(&self.closest_beacon);
+        let min_x = self.sensor.x - sensor_radius;
+        let max_x = self.sensor.x + sensor_radius;
+        let min_y = self.sensor.y - sensor_radius;
+        let max_y = self.sensor.y + sensor_radius;
+
+        Bounds {
+            min: Point { x: min_x, y: min_y },
+            max: Point { x: max_x, y: max_y },
+        }
     }
 }
 
@@ -103,131 +105,16 @@ lazy_static::lazy_static! {
     ).unwrap();
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-struct Cell {
-    kind: CellKind,
-    is_covered: bool,
-}
-
-impl Cell {
-    fn is_beaconless(&self) -> bool {
-        self.is_covered && self.kind == CellKind::Empty
-    }
-}
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-enum CellKind {
-    #[default]
-    Empty,
-    Beacon,
-    Sensor,
-}
-
-struct Grid {
-    bounds: Bounds,
-    cells: Vec<Cell>,
-}
-
-impl Grid {
-    fn new(cell: Cell, bounds: Bounds) -> Self {
-        let num_cells = bounds.width() * bounds.height();
-        let num_cells = num_cells.try_into().unwrap();
-        let cells = vec![cell; num_cells];
-
-        Self { bounds, cells }
-    }
-
-    fn grow(&mut self, bounds: Bounds) {
-        let new_bounds = self.bounds.union(&bounds);
-
-        if new_bounds == self.bounds {
-            return;
+fn is_beaconless<'a>(
+    sensor_reports: impl IntoIterator<Item = &'a SensorReport>,
+    point: Point,
+) -> bool {
+    for report in sensor_reports {
+        if report.closest_beacon == point {
+            return false;
+        } else if report.covers_point(point) {
+            return true;
         }
-
-        let mut new_grid = Grid::new(Cell::default(), new_bounds);
-
-        for (point, cell) in self.iter() {
-            let new_offset = new_grid.offset(point).unwrap();
-            new_grid.cells[new_offset] = cell;
-        }
-
-        *self = new_grid;
     }
-
-    fn offset(&self, point: Point) -> Option<usize> {
-        if !self.bounds.contains(point) {
-            return None;
-        }
-
-        let row = point.x - self.bounds.min.x;
-        let col = point.y - self.bounds.min.y;
-
-        let offset = (col * self.bounds.width()) + row;
-        let offset = offset.try_into().unwrap();
-
-        Some(offset)
-    }
-
-    fn try_get(&self, point: Point) -> Option<Cell> {
-        let offset = self.offset(point)?;
-        Some(self.cells[offset])
-    }
-
-    fn get(&self, point: Point) -> Cell {
-        self.try_get(point).unwrap_or_default()
-    }
-
-    fn update(&mut self, point: Point, f: impl FnOnce(&mut Cell)) {
-        self.grow(Bounds::new(point));
-        let offset = self.offset(point).unwrap();
-        let cell = &mut self.cells[offset];
-        f(cell);
-    }
-
-    fn iter(&self) -> impl Iterator<Item = (Point, Cell)> + '_ {
-        self.bounds.points().map(|point| (point, self.get(point)))
-    }
-
-    fn row(&self, row: i32) -> impl Iterator<Item = (Point, Cell)> + '_ {
-        self.bounds.x_bounds().map(move |x| {
-            let point = Point { x, y: row };
-            (point, self.get(point))
-        })
-    }
-
-    fn display(&self) -> impl Display + '_ {
-        self.bounds
-            .y_bounds()
-            .map(move |y| {
-                let row = self
-                    .bounds
-                    .x_bounds()
-                    .map(move |x| {
-                        let point = Point { x, y };
-
-                        let cell = self.get(point);
-                        match cell {
-                            Cell {
-                                kind: CellKind::Beacon,
-                                ..
-                            } => 'B',
-                            Cell {
-                                kind: CellKind::Sensor,
-                                ..
-                            } => 'S',
-                            Cell {
-                                is_covered: true, ..
-                            } => '#',
-                            Cell {
-                                kind: CellKind::Empty,
-                                ..
-                            } => '.',
-                        }
-                    })
-                    .join_concat();
-
-                lazy_format::lazy_format!("{y:3} {row}")
-            })
-            .join_with("\n")
-    }
+    return false;
 }
