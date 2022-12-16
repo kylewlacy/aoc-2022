@@ -2,7 +2,7 @@
 name = "day15"
 version = "0.1.0"
 edition = "2021"
-default-run = "part1"
+default-run = "part2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -10,6 +10,7 @@ default-run = "part1"
 clap = { version = "4.0.29", features = ["derive"] }
 color-eyre = "0.6.2"
 eyre = "0.6.8"
+itertools = "0.10.5"
 lazy_static = "1.4.0"
 regex = "1.7.0"
 

@@ -1,6 +1,6 @@
 use std::ops::RangeInclusive;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Point {
     pub x: i32,
     pub y: i32,
